@@ -1,7 +1,10 @@
 package com.ha.qna;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class Profile {
 	private Map<String, Answer> answers = new HashMap<>();
@@ -21,28 +24,39 @@ public class Profile {
 	}
 
 	public boolean matches(Criteria criteria) {
-		score = 0;
+		score = new MatchSet(answers, criteria).getScore();
+		if(doesNotMeetAnyMustMatchCriterion(criteria)) {
+			return false;
+		}
+		return anyMatches(criteria);
+	}
 
-		boolean kill = false;
+	private boolean doesNotMeetAnyMustMatchCriterion(Criteria criteria) {
+		for (Criterion criterion : criteria) {
+			boolean match = criterion.matches(answerMatching(criterion));
+			if (!match && criterion.getWeight() == Weight.MustMatch)
+				return true;
+		}
+		return false;
+	}
+
+	private boolean anyMatches(Criteria criteria) {
 		boolean anyMatches = false;
 		for (Criterion criterion : criteria) {
-			Answer answer = answers.get(criterion.getAnswer().getQuestionText());
-			boolean match = criterion.getWeight() == Weight.DontCare || answer.match(criterion.getAnswer());
-
-			if (!match && criterion.getWeight() == Weight.MustMatch) {
-				kill = true;
-			}
-			if (match) {
-				score += criterion.getWeight().getValue();
-			}
-			anyMatches |= match;
+			anyMatches |= criterion.matches(answerMatching(criterion));
 		}
-		if (kill)
-			return false;
 		return anyMatches;
+	}
+
+	private Answer answerMatching(Criterion criterion) {
+		return answers.get(criterion.getAnswer().getQuestionText());
 	}
 
 	public int score() {
 		return score;
+	}
+
+	public List<Answer> find(Predicate<Answer> pred) {
+		return answers.values().stream().filter(pred).collect(Collectors.toList());
 	}
 }
